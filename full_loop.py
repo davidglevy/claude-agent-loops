@@ -10,8 +10,11 @@ turn, not a finished one.
 """
 import anthropic
 import json
+import logging
 import random
 import sys
+
+logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic()
 
@@ -44,7 +47,7 @@ GREETING_TEMPLATES = [
 
 def say_hello(name: str):
     greeting = random.choice(GREETING_TEMPLATES).format(name=name)
-    print(f"Saying hello to {name}")
+    logger.info(f"Saying hello to {name}")
     return greeting
 
 
@@ -55,7 +58,7 @@ def run_tools(people):
 
     people_string = ",".join(people)
 
-    print(f"Saying hello to [{people}]")
+    logger.info(f"Saying hello to [{people}]")
 
     user_msg = {
         "role": "user",
@@ -74,16 +77,16 @@ def run_tools(people):
     )
 
     for current_turn in range(0,20):
-        print(f"Current Turn {current_turn}")
-    
-        print(f"Turn {current_turn} stop_reason:", turn.stop_reason)
-        print(f"Turn {current_turn} content block types:", [b.type for b in turn.content])
+        logger.debug(f"Current Turn {current_turn}")
+
+        logger.debug(f"Turn {current_turn} stop_reason: {turn.stop_reason}")
+        logger.debug(f"Turn {current_turn} content block types: {[b.type for b in turn.content]}")
 
         match turn.stop_reason:
             case "stop_sequence" | "end_turn":
-                print(f"We have reached the {turn.stop_reason}")
+                logger.info(f"We have reached the {turn.stop_reason}")
                 response = turn.content
-                print(f"Turn response: {response}")
+                logger.debug(f"Turn response: {response}")
                 break
             case "tool_use":
            
@@ -107,15 +110,15 @@ def run_tools(people):
                         messages=messages
                     )
                 except anthropic.APIStatusError as e:
-                    print(f"Error {e.status_code}: {e.message}")
+                    logger.error(f"Error {e.status_code}: {e.message}")
                     break
 
             case "max_tokens":
-                print("Hit max tokens, ending.")
+                logger.warning("Hit max tokens, ending.")
                 more_turns = False
                 break
             case "pause_turn":
-                print("Hit a pause turn, resubmitting bare request")
+                logger.info("Hit a pause turn, resubmitting bare request")
                 try:
                     messages.append({"role": "assistant", "content": turn.content})
                     turn = client.messages.create(
@@ -123,13 +126,18 @@ def run_tools(people):
                         messages=messages
                     )
                 except anthropic.APIStatusError as e:
-                    print(f"ERROR {e.status_code}: {e.message}")
+                    logger.error(f"ERROR {e.status_code}: {e.message}")
                     break
             case _:
-                print(f"Unexpected stop_reason [{turn.stop_reason}], ending")
+                logger.warning(f"Unexpected stop_reason [{turn.stop_reason}], ending")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)-8s %(message)s",
+    )
+
     if len(sys.argv) < 2:
         print("Expected at least one person to greet")
         exit(1)
